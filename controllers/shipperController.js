@@ -45,3 +45,54 @@ export const updateProfile = async (req, res) => {
     res.status(500).json({ error: 'Failed to update profile' });
   }
 };
+
+export const getStats = async (req, res) => {
+  try {
+    // Get shipper ID
+    const shipperResult = await pool.query(
+      'SELECT id FROM shippers WHERE user_id = $1',
+      [req.user.id]
+    );
+
+    if (shipperResult.rows.length === 0) {
+      return res.json({
+        totalShipments: 0,
+        activeShipments: 0,
+        totalSpent: 0,
+      });
+    }
+
+    const shipperId = shipperResult.rows[0].id;
+
+    // Get total shipments count
+    const totalResult = await pool.query(
+      'SELECT COUNT(*) as count FROM cargo_listings WHERE shipper_id = $1',
+      [shipperId]
+    );
+
+    // Get active shipments count
+    const activeResult = await pool.query(
+      `SELECT COUNT(*) as count FROM cargo_listings 
+       WHERE shipper_id = $1 AND status IN ('open', 'matched', 'in_transit')`,
+      [shipperId]
+    );
+
+    // Get total spent (sum of completed trip payments)
+    const spentResult = await pool.query(
+      `SELECT COALESCE(SUM(p.amount_kes), 0) as total
+       FROM payments p
+       JOIN trips t ON p.trip_id = t.id
+       WHERE t.shipper_id = $1 AND p.status = 'released'`,
+      [shipperId]
+    );
+
+    res.json({
+      totalShipments: parseInt(totalResult.rows[0].count),
+      activeShipments: parseInt(activeResult.rows[0].count),
+      totalSpent: parseFloat(spentResult.rows[0].total),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+};

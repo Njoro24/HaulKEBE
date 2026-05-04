@@ -36,10 +36,10 @@ export const register = async (req, res) => {
         [user.id, truck_type, plate_number, capacity_kg, primary_route]
       );
     } else if (role === 'shipper') {
-      const { business_name, county } = req.body;
+      const { business_name, county, national_id, cargo_types } = req.body;
       await pool.query(
-        'INSERT INTO shippers (user_id, business_name, county) VALUES ($1, $2, $3)',
-        [user.id, business_name, county]
+        'INSERT INTO shippers (user_id, business_name, county, national_id, cargo_types) VALUES ($1, $2, $3, $4, $5)',
+        [user.id, business_name, county, national_id, cargo_types || []]
       );
     }
 

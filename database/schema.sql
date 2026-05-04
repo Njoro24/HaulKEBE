@@ -31,6 +31,8 @@ CREATE TABLE shippers (
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   business_name VARCHAR(255),
   county VARCHAR(100),
+  national_id VARCHAR(50),
+  cargo_types TEXT[],
   rating_avg DECIMAL(3,2) DEFAULT 0.00,
   total_shipments INTEGER DEFAULT 0
 );
@@ -104,6 +106,20 @@ CREATE TABLE notifications (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Change requests table (for profile edits requiring admin approval)
+CREATE TABLE change_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  field VARCHAR(255) NOT NULL,
+  current_value TEXT,
+  new_value TEXT NOT NULL,
+  reason TEXT,
+  status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  admin_note TEXT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Create indexes for better query performance
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_drivers_user_id ON drivers(user_id);
@@ -116,3 +132,6 @@ CREATE INDEX idx_trips_cargo_id ON trips(cargo_id);
 CREATE INDEX idx_payments_trip_id ON payments(trip_id);
 CREATE INDEX idx_ratings_rated_user ON ratings(rated_user);
 CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX idx_change_requests_user_id ON change_requests(user_id);
+CREATE INDEX idx_change_requests_status ON change_requests(status);
+CREATE INDEX idx_change_requests_created_at ON change_requests(created_at);

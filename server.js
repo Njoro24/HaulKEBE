@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { Server } from 'socket.io';
 import http from 'http';
+import pool from './config/db.js';
 
 // Load environment variables
 dotenv.config();
@@ -17,6 +18,7 @@ import paymentRoutes from './routes/payments.js';
 import ratingRoutes from './routes/ratings.js';
 import trackingRoutes from './routes/tracking.js';
 import notificationRoutes from './routes/notifications.js';
+import profileRoutes from './routes/profile.js';
 
 // Import socket handlers
 import { setupTripSocket } from './sockets/tripSocket.js';
@@ -26,13 +28,16 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: ['http://localhost:5173', 'http://localhost:5174'],
     methods: ['GET', 'POST'],
   },
 });
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:5173', 'http://localhost:5174'],
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -52,6 +57,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/ratings', ratingRoutes);
 app.use('/api/tracking', trackingRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/profile', profileRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -64,11 +70,41 @@ setupLocationSocket(io);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Internal server error' });
+  console.error('Error occurred:');
+  console.error('Path:', req.path);
+  console.error('Method:', req.method);
+  console.error('Error:', err.stack);
+  
+  // Don't send stack trace to client in production
+  const errorResponse = {
+    error: 'Internal server error',
+    message: err.message
+  };
+  
+  if (process.env.NODE_ENV === 'development') {
+    errorResponse.stack = err.stack;
+  }
+  
+  res.status(err.status || 500).json(errorResponse);
 });
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`HaulKE Backend running on port ${PORT}`);
-});
+
+// Test database connection before starting server
+pool.query('SELECT NOW()')
+  .then(() => {
+    console.log('✓ Database connected successfully');
+    server.listen(PORT, () => {
+      console.log(`HaulKE Backend running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('✗ Database connection failed:');
+    console.error(err.message);
+    console.error('\nPlease ensure:');
+    console.error('1. PostgreSQL is running');
+    console.error('2. Database credentials in .env are correct');
+    console.error('3. Database exists and tables are created');
+    console.error('\nRun: node scripts/test-db-connection.js to diagnose');
+    process.exit(1);
+  });

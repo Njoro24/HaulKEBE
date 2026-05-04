@@ -82,6 +82,31 @@ export const getAllCargo = async (req, res) => {
   try {
     const { cargo_type, route } = req.query;
 
+    // If user is a shipper, get their shipper_id and return only their cargo
+    if (req.user && req.user.role === 'shipper') {
+      const shipperResult = await pool.query('SELECT id FROM shippers WHERE user_id = $1', [req.user.id]);
+
+      if (shipperResult.rows.length === 0) {
+        return res.json([]);
+      }
+
+      const shipperId = shipperResult.rows[0].id;
+
+      let query = 'SELECT * FROM cargo_listings WHERE shipper_id = $1';
+      const params = [shipperId];
+
+      if (cargo_type) {
+        query += ` AND cargo_type = $${params.length + 1}`;
+        params.push(cargo_type);
+      }
+
+      query += ' ORDER BY created_at DESC';
+
+      const result = await pool.query(query, params);
+      return res.json(result.rows);
+    }
+
+    // For drivers or public access, show all open cargo
     let query = 'SELECT * FROM cargo_listings WHERE status = $1';
     const params = ['open'];
 
@@ -90,13 +115,15 @@ export const getAllCargo = async (req, res) => {
       params.push(cargo_type);
     }
 
+    query += ' ORDER BY created_at DESC';
+
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch cargo listings' });
   }
-};
+}
 
 export const getCargoById = async (req, res) => {
   try {

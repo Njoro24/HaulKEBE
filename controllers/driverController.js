@@ -103,3 +103,55 @@ export const getPublicProfile = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch driver' });
   }
 };
+
+
+export const getStats = async (req, res) => {
+  try {
+    // Get driver ID
+    const driverResult = await pool.query(
+      'SELECT id FROM drivers WHERE user_id = $1',
+      [req.user.id]
+    );
+
+    if (driverResult.rows.length === 0) {
+      return res.json({
+        totalTrips: 0,
+        activeTrips: 0,
+        totalEarnings: 0,
+      });
+    }
+
+    const driverId = driverResult.rows[0].id;
+
+    // Get total trips count
+    const totalResult = await pool.query(
+      'SELECT COUNT(*) as count FROM trips WHERE driver_id = $1',
+      [driverId]
+    );
+
+    // Get active trips count
+    const activeResult = await pool.query(
+      `SELECT COUNT(*) as count FROM trips 
+       WHERE driver_id = $1 AND status IN ('accepted', 'picked_up', 'in_transit')`,
+      [driverId]
+    );
+
+    // Get total earnings (sum of released payments)
+    const earningsResult = await pool.query(
+      `SELECT COALESCE(SUM(p.amount_kes), 0) as total
+       FROM payments p
+       JOIN trips t ON p.trip_id = t.id
+       WHERE t.driver_id = $1 AND p.status = 'released'`,
+      [driverId]
+    );
+
+    res.json({
+      totalTrips: parseInt(totalResult.rows[0].count),
+      activeTrips: parseInt(activeResult.rows[0].count),
+      totalEarnings: parseFloat(earningsResult.rows[0].total),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+};
